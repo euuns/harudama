@@ -1,0 +1,15 @@
+# 공통
+node_modules/
+dist/
+.env
+
+# React Native (iOS / Android)
+android/.gradle/
+android/app/build/
+android/.cxx/
+ios/Pods/
+ios/build/
+
+# 기타
+.expo/
+.vscode/
