@@ -8,8 +8,13 @@ import {
   View,
   ScrollView,
 } from 'react-native';
+import { Platform } from 'react-native';
 
-const API_BASE = 'http://10.0.2.2:4000'; // 에뮬 기준 서버 주소
+// 에뮬 / 시뮬 기준 기본값
+const API_BASE =
+  Platform.OS === 'ios'
+    ? 'http://localhost:4000'   // iOS 시뮬레이터 → 맥 localhost
+    : 'http://10.0.2.2:4000';   // Android 에뮬레이터 → 호스트 localhost
 
 export default function App() {
   const [input, setInput] = useState('');

@@ -114,5 +114,5 @@ app.get('/api/chat/log', (req: Request, res: Response) => {
 
 // ===== 서버 시작 =====
 app.listen(PORT, () => {
-  console.log(`✅ API server listening on http://localhost:${PORT}`);
+  console.log(`api 서버 주소임 http://localhost:${PORT}`);
 });
