@@ -12,9 +12,9 @@ export const pool = mysql.createPool({
 (async () => {
   try {
     const conn = await pool.getConnection();
-    console.log('✅ MySQL 연결 성공!');
+    console.log(' MySQL 연결 성공');
     conn.release();
   } catch (err) {
-    console.error('❌ MySQL 연결 실패:', err);
+    console.error(' MySQL 연결 실패:', err);
   }
 })();
