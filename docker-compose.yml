@@ -1,0 +1,11 @@
+version: "3.8"
+
+services:
+  api:
+    build: ./server
+    container_name: harudama-dev-api
+    ports:
+      - "4000:4000"
+    env_file:
+      - ./server/.env
+    restart: unless-stopped
