@@ -13,3 +13,5 @@ ios/build/
 # 기타
 .expo/
 .vscode/
+tunnel.ps1
+1589.pem

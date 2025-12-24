@@ -29,8 +29,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
  */
 const API_BASE =
   Platform.OS === 'ios'
-    ? 'http://13.124.137.80:4000'
-    : 'http://13.124.137.80:4000';
+    ? 'http://localhost:4000'
+    : 'http://10.0.2.2:4000';
 
 // 채팅방 목록 아이템 타입
 type RoomItem = {
