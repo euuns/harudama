@@ -2,6 +2,8 @@
 node_modules/
 dist/
 .env
+android/
+ios/
 
 # React Native (iOS / Android)
 android/.gradle/
@@ -15,3 +17,4 @@ ios/build/
 .vscode/
 tunnel.ps1
 1589.pem
+tunnel.sh
