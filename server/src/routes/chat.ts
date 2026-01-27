@@ -127,7 +127,7 @@ async function getChatLogRedis(roomId: number, limit = 50): Promise<ChatItem[]> 
     }
   }
 
-  // Redis는 최신→과거(LPUSH)라 reverse해서 오래된→최신
+  // 최신→과거(LPUSH)라 reverse해서 오래된→최신
   return items.reverse();
 }
 
@@ -135,27 +135,22 @@ async function getChatLogRedis(roomId: number, limit = 50): Promise<ChatItem[]> 
  * DB: 메시지 저장/조회 (장기 기록 Source of Truth)
  * ===================== */
 
-/**
- * DB 저장 (옵션 A: 비동기)
- * chat_message(room_id, role, content, created_at)
- */
 async function persistChatToDb(params: {
   roomId: number;
   role: ChatRole;
   content: string;
   createdAt: Date;
-}) {
+}): Promise<number> {
   const { roomId, role, content, createdAt } = params;
 
-  await pool.execute<ResultSetHeader>(
+  const [result] = await pool.execute<ResultSetHeader>(
     `INSERT INTO chat_message (room_id, role, content, created_at) VALUES (?, ?, ?, ?)`,
     [roomId, role, content, createdAt],
   );
+
+  return result.insertId;
 }
 
-/**
- * DB 최신 N개 (DESC로 가져옴)
- */
 async function getChatRecentFromDb(params: { roomId: number; limit: number }): Promise<DbChatRow[]> {
   const { roomId, limit } = params;
   const lim = Math.min(Math.max(limit, 1), 500);
@@ -173,11 +168,6 @@ async function getChatRecentFromDb(params: { roomId: number; limit: number }): P
   return rows;
 }
 
-/**
- * DB 기간 조회 (DESC로 가져옴)
- * ✅ 권장 인덱스(거의 필수):
- *   CREATE INDEX idx_room_created_at ON chat_message (room_id, created_at);
- */
 async function getChatByDateRange(params: {
   roomId: number;
   from: Date;
@@ -202,9 +192,6 @@ async function getChatByDateRange(params: {
   return rows;
 }
 
-/**
- * DB 전체 히스토리(무한 스크롤) 커서 페이지네이션: beforeId
- */
 async function getChatLogFromDbCursor(params: {
   roomId: number;
   limit: number;
@@ -241,14 +228,13 @@ async function getChatLogFromDbCursor(params: {
 }
 
 /* =====================
- * “회고 질문” 감지 + 기간 파싱(가벼운 룰 기반)
+ * “회고 질문” 감지 + 기간 파싱
  * ===================== */
 
 function isRecallQuery(text: string): boolean {
   const t = text.trim();
   if (!t) return false;
 
-  // 날짜/기간/회고를 강하게 암시하는 키워드
   const keywords = [
     '지난', '저번', '그때', '기억', '기록', '회고', '요약',
     '언제', '어땠', '뭐했', '무엇했', '했었', '했었지',
@@ -257,50 +243,35 @@ function isRecallQuery(text: string): boolean {
   ];
 
   if (keywords.some((k) => t.includes(k))) return true;
-
-  // 숫자+단위 패턴(예: 2주, 14일, 3개월, 1년)
   if (/\d+\s*(일|주|개월|달|년)\b/.test(t)) return true;
-
-  // 날짜 패턴(YYYY-MM-DD, YYYY/MM/DD)
   if (/\b20\d{2}[-/]\d{1,2}[-/]\d{1,2}\b/.test(t)) return true;
 
   return false;
 }
 
 function parseDateToken(token: string): Date | null {
-  // token: 2026-01-23 or 2026/01/23
-  const m = token.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+  const m = token.trim().match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
   if (!m) return null;
   const y = Number(m[1]);
   const mo = Number(m[2]);
   const d = Number(m[3]);
   if (!y || !mo || !d) return null;
   const dt = new Date(y, mo - 1, d, 0, 0, 0, 0);
-  if (Number.isNaN(dt.getTime())) return null;
-  return dt;
+  return Number.isNaN(dt.getTime()) ? null : dt;
 }
 
 function clampRange(from: Date, to: Date) {
-  // from <= to 보정
   if (from.getTime() > to.getTime()) return { from: to, to: from };
   return { from, to };
 }
 
-/**
- * 메시지에서 “대략적인 기간” 추정
- * - 정확한 NLP가 아니라, 실무용 1차 룰 기반
- */
 function extractRangeFromMessage(message?: string): { from: Date; to: Date; label: string } | null {
   const now = new Date();
-
-  // ✅ message가 undefined여도 안전
   const text = (message ?? '').trim();
   if (!text) return null;
 
-  // ✅ match 결과를 "무조건 string[]"로 고정 (RegExpMatchArray/[] union 제거)
   const dateTokens: string[] = text.match(/\b20\d{2}[-/]\d{1,2}[-/]\d{1,2}\b/g) ?? [];
 
-  // 1) 명시 날짜 2개(예: 2025-01-01 ~ 2025-02-01)
   if (dateTokens.length >= 2) {
     const t0 = dateTokens[0];
     const t1 = dateTokens[1];
@@ -316,7 +287,6 @@ function extractRangeFromMessage(message?: string): { from: Date; to: Date; labe
     }
   }
 
-  // 2) 명시 날짜 1개(그 날짜 하루)
   if (dateTokens.length === 1) {
     const t0 = dateTokens[0];
     const d = parseDateToken(t0);
@@ -327,7 +297,6 @@ function extractRangeFromMessage(message?: string): { from: Date; to: Date; labe
     }
   }
 
-  // 3) 상대 표현
   const dayMs = 24 * 60 * 60 * 1000;
 
   if (text.includes('오늘')) {
@@ -354,7 +323,6 @@ function extractRangeFromMessage(message?: string): { from: Date; to: Date; labe
     return { from, to: now, label: '지난 1년(작년 언급)' };
   }
 
-  // 4) 숫자+단위
   const m = text.match(/(\d+)\s*(일|주|개월|달|년)\b/);
   if (m) {
     const n = Number(m[1]);
@@ -380,7 +348,6 @@ function extractRangeFromMessage(message?: string): { from: Date; to: Date; labe
  * ===================== */
 
 function formatDbRowsForPrompt(rowsAsc: DbChatRow[]): string {
-  // 너무 길면 모델 입력 터짐 -> content 길이 약간 컷
   const cut = (s: string, max = 500) => (s.length > max ? s.slice(0, max) + '…' : s);
 
   return rowsAsc
@@ -393,8 +360,8 @@ function formatDbRowsForPrompt(rowsAsc: DbChatRow[]): string {
 }
 
 async function callLLMWithDbContext(params: {
-  recentContext: DbChatRow[]; // 오래된→최신
-  recallContext: DbChatRow[]; // 오래된→최신 (있을 수도, 없을 수도)
+  recentContext: DbChatRow[];
+  recallContext: DbChatRow[];
   userMessage: string;
   recallLabel?: string;
 }): Promise<string> {
@@ -440,18 +407,11 @@ ${userMessage}
 
 const router = Router();
 
-/**
- * POST /api/chat/anon
- */
 router.post('/anon', (_req: Request, res: Response) => {
   const userId = 'anon_' + crypto.randomBytes(16).toString('hex');
   return res.json({ ok: true, userId });
 });
 
-/**
- * POST /api/chat/room
- * body: { userId, title? }
- */
 router.post('/room', async (req: Request, res: Response) => {
   try {
     const userId = getUserId(req);
@@ -481,8 +441,113 @@ router.post('/room', async (req: Request, res: Response) => {
 });
 
 /**
- * GET /api/chat/room?userId=xxx
+ * ✅ 핵심: DB 저장을 "반드시" 수행
  */
+router.post('/', async (req: Request, res: Response) => {
+  try {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ ok: false, error: 'MISSING_USER' });
+
+    const roomIdNum = Number(req.body?.roomId);
+    const msg = String(req.body?.message ?? '').trim();
+
+    if (!roomIdNum || Number.isNaN(roomIdNum)) {
+      return res.status(400).json({ ok: false, error: 'MISSING_ROOM_ID' });
+    }
+    if (!msg) {
+      return res.status(400).json({ ok: false, error: 'MISSING_MESSAGE' });
+    }
+
+    await assertRoomOwner(roomIdNum, userId);
+
+    // 1) user 저장: Redis + DB(강제)
+    const userTs = Date.now();
+    const userCreatedAt = new Date(userTs);
+
+    await pushChat(roomIdNum, 'user', msg, userTs);
+
+    const userInsertId = await persistChatToDb({
+      roomId: roomIdNum,
+      role: 'user',
+      content: msg,
+      createdAt: userCreatedAt,
+    });
+
+    // 2) LLM 컨텍스트는 DB에서 항상 조회
+    const RECENT_DB_CONTEXT = Number(process.env.RECENT_DB_CONTEXT ?? 40);
+    const RECALL_DB_LIMIT = Number(process.env.RECALL_DB_LIMIT ?? 400);
+
+    const recentRowsDesc = await getChatRecentFromDb({ roomId: roomIdNum, limit: RECENT_DB_CONTEXT });
+    const recentRowsAsc = recentRowsDesc.slice().reverse();
+
+    let recallRowsAsc: DbChatRow[] = [];
+    let recallLabel: string | undefined;
+
+    if (isRecallQuery(msg)) {
+      const range = extractRangeFromMessage(msg);
+      const now = new Date();
+
+      if (range) {
+        recallLabel = range.label;
+        const recallDesc = await getChatByDateRange({
+          roomId: roomIdNum,
+          from: range.from,
+          to: range.to,
+          limit: RECALL_DB_LIMIT,
+        });
+        recallRowsAsc = recallDesc.slice().reverse();
+      } else {
+        const from = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+        recallLabel = '최근 90일(기간 추정)';
+        const recallDesc = await getChatByDateRange({
+          roomId: roomIdNum,
+          from,
+          to: now,
+          limit: RECALL_DB_LIMIT,
+        });
+        recallRowsAsc = recallDesc.slice().reverse();
+      }
+    }
+
+    // 3) LLM 호출
+    const replyText = await callLLMWithDbContext({
+      recentContext: recentRowsAsc,
+      recallContext: recallRowsAsc,
+      userMessage: msg,
+      recallLabel,
+    });
+
+    // 4) assistant 저장: Redis + DB(강제)
+    const aiTs = Date.now();
+    const aiCreatedAt = new Date(aiTs);
+
+    await pushChat(roomIdNum, 'assistant', replyText, aiTs);
+
+    const aiInsertId = await persistChatToDb({
+      roomId: roomIdNum,
+      role: 'assistant',
+      content: replyText,
+      createdAt: aiCreatedAt,
+    });
+
+    return res.json({
+      ok: true,
+      debug: { userInsertId, aiInsertId }, // 원하면 나중에 제거
+      assistant: {
+        roomId: roomIdNum,
+        role: 'assistant' as ChatRole,
+        content: replyText,
+        createdAt: aiCreatedAt.toISOString(),
+      },
+    });
+  } catch (err: any) {
+    console.error('[POST /api/chat] error:', err);
+    const status = typeof err?.status === 'number' ? err.status : 500;
+    const msg = typeof err?.message === 'string' ? err.message : 'INTERNAL_ERROR';
+    return res.status(status).json({ ok: false, error: msg });
+  }
+});
+
 router.get('/room', async (req: Request, res: Response) => {
   try {
     const userId = getUserId(req);
@@ -512,127 +577,6 @@ router.get('/room', async (req: Request, res: Response) => {
   }
 });
 
-/**
- * POST /api/chat
- * body: { userId, roomId, message }
- *
- * ✅ 변경 핵심:
- * - 메시지 저장: Redis 먼저 + DB 비동기
- * - LLM 근거: Redis가 아니라 "DB를 항상 조회"해서 만든다
- * - 회고 질문이면: DB 기간 조회 + 최근 맥락
- * - 일반 질문이어도: DB 최근 맥락은 항상 조회
- */
-router.post('/', async (req: Request, res: Response) => {
-  try {
-    const userId = getUserId(req);
-    if (!userId) return res.status(401).json({ ok: false, error: 'MISSING_USER' });
-
-    const roomIdNum = Number(req.body?.roomId);
-    const msg = String(req.body?.message ?? '').trim();
-
-    if (!roomIdNum || Number.isNaN(roomIdNum)) {
-      return res.status(400).json({ ok: false, error: 'MISSING_ROOM_ID' });
-    }
-    if (!msg) {
-      return res.status(400).json({ ok: false, error: 'MISSING_MESSAGE' });
-    }
-
-    // 0) 방 소유 검증
-    await assertRoomOwner(roomIdNum, userId);
-
-    // 1) user 메시지: Redis 먼저 저장 + DB 비동기 저장
-    const userTs = Date.now();
-    const userCreatedAt = new Date(userTs);
-
-    await pushChat(roomIdNum, 'user', msg, userTs);
-
-    void persistChatToDb({
-      roomId: roomIdNum,
-      role: 'user',
-      content: msg,
-      createdAt: userCreatedAt,
-    }).catch((e) => console.error('[persistChatToDb:user] failed:', e));
-
-    // 2) LLM 근거는 "DB에서 항상 조회"
-    const RECENT_DB_CONTEXT = Number(process.env.RECENT_DB_CONTEXT ?? 40); // 최근 맥락(기본 40개)
-    const RECALL_DB_LIMIT = Number(process.env.RECALL_DB_LIMIT ?? 400); // 회고 구간 최대(기본 400개)
-
-    // DB 최근 맥락(항상)
-    const recentRowsDesc = await getChatRecentFromDb({ roomId: roomIdNum, limit: RECENT_DB_CONTEXT });
-    const recentRowsAsc = recentRowsDesc.slice().reverse(); // 오래된→최신
-
-    // 회고 질문이면 기간 조회 추가
-    let recallRowsAsc: DbChatRow[] = [];
-    let recallLabel: string | undefined;
-
-    if (isRecallQuery(msg)) {
-      const range = extractRangeFromMessage(msg);
-      if (range) {
-        recallLabel = range.label;
-        const recallDesc = await getChatByDateRange({
-          roomId: roomIdNum,
-          from: range.from,
-          to: range.to,
-          limit: RECALL_DB_LIMIT,
-        });
-        recallRowsAsc = recallDesc.slice().reverse();
-      } else {
-        // 회고로 감지됐지만 기간 파싱 실패 시: 최근 90일 정도로 완충(최소한 동작)
-        const now = new Date();
-        const from = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-        recallLabel = '최근 90일(기간 추정)';
-        const recallDesc = await getChatByDateRange({
-          roomId: roomIdNum,
-          from,
-          to: now,
-          limit: RECALL_DB_LIMIT,
-        });
-        recallRowsAsc = recallDesc.slice().reverse();
-      }
-    }
-
-    // 3) LLM 호출(DB 근거 기반)
-    const replyText = await callLLMWithDbContext({
-      recentContext: recentRowsAsc,
-      recallContext: recallRowsAsc,
-      userMessage: msg,
-      recallLabel,
-    });
-
-    // 4) assistant 메시지: Redis 먼저 저장 + DB 비동기 저장
-    const aiTs = Date.now();
-    const aiCreatedAt = new Date(aiTs);
-
-    await pushChat(roomIdNum, 'assistant', replyText, aiTs);
-
-    void persistChatToDb({
-      roomId: roomIdNum,
-      role: 'assistant',
-      content: replyText,
-      createdAt: aiCreatedAt,
-    }).catch((e) => console.error('[persistChatToDb:assistant] failed:', e));
-
-    return res.json({
-      ok: true,
-      assistant: {
-        roomId: roomIdNum,
-        role: 'assistant' as ChatRole,
-        content: replyText,
-        createdAt: aiCreatedAt.toISOString(),
-      },
-    });
-  } catch (err: any) {
-    console.error('[POST /api/chat] error:', err);
-    const status = typeof err?.status === 'number' ? err.status : 500;
-    const msg = typeof err?.message === 'string' ? err.message : 'INTERNAL_ERROR';
-    return res.status(status).json({ ok: false, error: msg });
-  }
-});
-
-/**
- * GET /api/chat/log?userId=xxx&roomId=12&limit=50
- * - UI 빠른 로딩용: Redis 우선 → 비었으면 DB 최신 N개 fallback
- */
 router.get('/log', async (req: Request, res: Response) => {
   try {
     const userId = getUserId(req);
@@ -647,7 +591,6 @@ router.get('/log', async (req: Request, res: Response) => {
 
     await assertRoomOwner(roomId, userId);
 
-    // 1) Redis 우선(최근)
     const redisItems = await getChatLogRedis(roomId, limit);
     if (redisItems.length > 0) {
       return res.json({
@@ -662,7 +605,6 @@ router.get('/log', async (req: Request, res: Response) => {
       });
     }
 
-    // 2) Redis가 비었으면 DB 최신 N개
     const rowsDesc = await getChatRecentFromDb({ roomId, limit });
     const rowsAsc = rowsDesc.slice().reverse();
 
@@ -686,10 +628,6 @@ router.get('/log', async (req: Request, res: Response) => {
   }
 });
 
-/**
- * GET /api/chat/log/db?userId=xxx&roomId=12&limit=50&beforeId=12345
- * - DB 전체 히스토리(무한 스크롤)용
- */
 router.get('/log/db', async (req: Request, res: Response) => {
   try {
     const userId = getUserId(req);
@@ -707,7 +645,6 @@ router.get('/log/db', async (req: Request, res: Response) => {
 
     const rowsDesc = await getChatLogFromDbCursor({ roomId, limit, beforeId });
     const rowsAsc = rowsDesc.slice().reverse();
-
     const nextBeforeId = rowsDesc.length ? rowsDesc[rowsDesc.length - 1].id : null;
 
     return res.json({
