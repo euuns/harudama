@@ -31,8 +31,10 @@ type ChatItem = {
   ts: number; // Redis 캐시용(ms)
 };
 
+// ✅ DB에 user_id 컬럼이 추가된 버전 기준
 type DbChatRow = RowDataPacket & {
   id: number;
+  user_id: string;
   room_id: number;
   role: ChatRole;
   content: string;
@@ -132,97 +134,107 @@ async function getChatLogRedis(roomId: number, limit = 50): Promise<ChatItem[]> 
 }
 
 /* =====================
- * DB: 메시지 저장/조회 (장기 기록 Source of Truth)
+ * DB: 메시지 저장/조회 (Source of Truth)
+ * ✅ user_id + created_at 기반 조회 지원
  * ===================== */
 
 async function persistChatToDb(params: {
+  userId: string;
   roomId: number;
   role: ChatRole;
   content: string;
   createdAt: Date;
 }): Promise<number> {
-  const { roomId, role, content, createdAt } = params;
+  const { userId, roomId, role, content, createdAt } = params;
 
   const [result] = await pool.execute<ResultSetHeader>(
-    `INSERT INTO chat_message (room_id, role, content, created_at) VALUES (?, ?, ?, ?)`,
-    [roomId, role, content, createdAt],
+    `INSERT INTO chat_message (user_id, room_id, role, content, created_at)
+     VALUES (?, ?, ?, ?, ?)`,
+    [userId, roomId, role, content, createdAt],
   );
 
   return result.insertId;
 }
 
-async function getChatRecentFromDb(params: { roomId: number; limit: number }): Promise<DbChatRow[]> {
-  const { roomId, limit } = params;
+async function getChatRecentFromDb(params: { userId: string; roomId: number; limit: number }): Promise<DbChatRow[]> {
+  const { userId, roomId, limit } = params;
   const lim = Math.min(Math.max(limit, 1), 500);
 
   const [rows] = await pool.query<DbChatRow[]>(
     `
-    SELECT id, room_id, role, content, created_at
+    SELECT id, user_id, room_id, role, content, created_at
     FROM chat_message
-    WHERE room_id = ?
+    WHERE user_id = ? AND room_id = ?
     ORDER BY id DESC
     LIMIT ?
     `,
-    [roomId, lim],
+    [userId, roomId, lim],
   );
   return rows;
 }
 
-async function getChatByDateRange(params: {
-  roomId: number;
+/**
+ * ✅ 회고/기간조회: room_id 없이 user_id + created_at 로 "전체 방"을 검색
+ */
+async function getChatByDateRangeByUser(params: {
+  userId: string;
   from: Date;
   to: Date;
   limit: number;
 }): Promise<DbChatRow[]> {
-  const { roomId, from, to, limit } = params;
-  const lim = Math.min(Math.max(limit, 1), 1000);
+  const { userId, from, to, limit } = params;
+  const lim = Math.min(Math.max(limit, 1), 2000);
 
   const [rows] = await pool.query<DbChatRow[]>(
     `
-    SELECT id, room_id, role, content, created_at
+    SELECT id, user_id, room_id, role, content, created_at
     FROM chat_message
-    WHERE room_id = ?
+    WHERE user_id = ?
       AND created_at >= ?
       AND created_at <= ?
     ORDER BY id DESC
     LIMIT ?
     `,
-    [roomId, from, to, lim],
+    [userId, from, to, lim],
   );
   return rows;
 }
 
+/**
+ * ✅ 룸 로그(페이지네이션): room_id 기준은 유지하되 user_id도 같이 체크
+ */
 async function getChatLogFromDbCursor(params: {
+  userId: string;
   roomId: number;
   limit: number;
   beforeId?: number;
 }): Promise<DbChatRow[]> {
-  const { roomId, limit, beforeId } = params;
+  const { userId, roomId, limit, beforeId } = params;
   const lim = Math.min(Math.max(limit, 1), 200);
 
   if (beforeId && !Number.isNaN(beforeId)) {
     const [rows] = await pool.query<DbChatRow[]>(
       `
-      SELECT id, room_id, role, content, created_at
+      SELECT id, user_id, room_id, role, content, created_at
       FROM chat_message
-      WHERE room_id = ? AND id < ?
+      WHERE user_id = ? AND room_id = ? AND id < ?
       ORDER BY id DESC
       LIMIT ?
       `,
-      [roomId, beforeId, lim],
+      [userId, roomId, beforeId, lim],
     );
     return rows;
   }
 
   const [rows] = await pool.query<DbChatRow[]>(
     `
-    SELECT id, room_id, role, content, created_at
+    SELECT id, user_id, room_id, role, content, created_at
     FROM chat_message
-    WHERE room_id = ?
+    WHERE user_id = ? AND room_id = ?
     ORDER BY id DESC
     LIMIT ?
     `,
-    [roomId, lim],
+    [userId, roomId, lim],
   );
   return rows;
 }
@@ -236,10 +248,31 @@ function isRecallQuery(text: string): boolean {
   if (!t) return false;
 
   const keywords = [
-    '지난', '저번', '그때', '기억', '기록', '회고', '요약',
-    '언제', '어땠', '뭐했', '무엇했', '했었', '했었지',
-    '주 전', '주전', '달 전', '달전', '년 전', '년전',
-    '어제', '오늘', '그제', '엊그제', '작년', '재작년',
+    '지난',
+    '저번',
+    '그때',
+    '기억',
+    '기록',
+    '회고',
+    '요약',
+    '언제',
+    '어땠',
+    '뭐했',
+    '무엇했',
+    '했었',
+    '했었지',
+    '주 전',
+    '주전',
+    '달 전',
+    '달전',
+    '년 전',
+    '년전',
+    '어제',
+    '오늘',
+    '그제',
+    '엊그제',
+    '작년',
+    '재작년',
   ];
 
   if (keywords.some((k) => t.includes(k))) return true;
@@ -442,6 +475,7 @@ router.post('/room', async (req: Request, res: Response) => {
 
 /**
  * ✅ 핵심: DB 저장을 "반드시" 수행
+ * ✅ 회고(기간조회)는 user_id + created_at 으로 "전체 방"에서 검색
  */
 router.post('/', async (req: Request, res: Response) => {
   try {
@@ -467,6 +501,7 @@ router.post('/', async (req: Request, res: Response) => {
     await pushChat(roomIdNum, 'user', msg, userTs);
 
     const userInsertId = await persistChatToDb({
+      userId,
       roomId: roomIdNum,
       role: 'user',
       content: msg,
@@ -477,20 +512,26 @@ router.post('/', async (req: Request, res: Response) => {
     const RECENT_DB_CONTEXT = Number(process.env.RECENT_DB_CONTEXT ?? 40);
     const RECALL_DB_LIMIT = Number(process.env.RECALL_DB_LIMIT ?? 400);
 
-    const recentRowsDesc = await getChatRecentFromDb({ roomId: roomIdNum, limit: RECENT_DB_CONTEXT });
+    // ✅ 최근맥락은 "현재 방" 기준 (대화 흐름 유지용)
+    const recentRowsDesc = await getChatRecentFromDb({
+      userId,
+      roomId: roomIdNum,
+      limit: RECENT_DB_CONTEXT,
+    });
     const recentRowsAsc = recentRowsDesc.slice().reverse();
 
     let recallRowsAsc: DbChatRow[] = [];
     let recallLabel: string | undefined;
 
+    // ✅ 회고는 "유저 전체 메시지"에서 기간으로 검색
     if (isRecallQuery(msg)) {
       const range = extractRangeFromMessage(msg);
       const now = new Date();
 
       if (range) {
         recallLabel = range.label;
-        const recallDesc = await getChatByDateRange({
-          roomId: roomIdNum,
+        const recallDesc = await getChatByDateRangeByUser({
+          userId,
           from: range.from,
           to: range.to,
           limit: RECALL_DB_LIMIT,
@@ -499,8 +540,8 @@ router.post('/', async (req: Request, res: Response) => {
       } else {
         const from = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
         recallLabel = '최근 90일(기간 추정)';
-        const recallDesc = await getChatByDateRange({
-          roomId: roomIdNum,
+        const recallDesc = await getChatByDateRangeByUser({
+          userId,
           from,
           to: now,
           limit: RECALL_DB_LIMIT,
@@ -524,6 +565,7 @@ router.post('/', async (req: Request, res: Response) => {
     await pushChat(roomIdNum, 'assistant', replyText, aiTs);
 
     const aiInsertId = await persistChatToDb({
+      userId,
       roomId: roomIdNum,
       role: 'assistant',
       content: replyText,
@@ -605,7 +647,8 @@ router.get('/log', async (req: Request, res: Response) => {
       });
     }
 
-    const rowsDesc = await getChatRecentFromDb({ roomId, limit });
+    // ✅ DB 조회도 user_id 조건 포함
+    const rowsDesc = await getChatRecentFromDb({ userId, roomId, limit });
     const rowsAsc = rowsDesc.slice().reverse();
 
     return res.json({
@@ -613,7 +656,7 @@ router.get('/log', async (req: Request, res: Response) => {
       source: 'db',
       items: rowsAsc.map((r) => ({
         id: r.id,
-        roomId,
+        roomId: r.room_id,
         role: r.role,
         content: r.content,
         createdAt: r.created_at.toISOString(),
@@ -643,7 +686,7 @@ router.get('/log/db', async (req: Request, res: Response) => {
 
     await assertRoomOwner(roomId, userId);
 
-    const rowsDesc = await getChatLogFromDbCursor({ roomId, limit, beforeId });
+    const rowsDesc = await getChatLogFromDbCursor({ userId, roomId, limit, beforeId });
     const rowsAsc = rowsDesc.slice().reverse();
     const nextBeforeId = rowsDesc.length ? rowsDesc[rowsDesc.length - 1].id : null;
 
@@ -651,7 +694,7 @@ router.get('/log/db', async (req: Request, res: Response) => {
       ok: true,
       items: rowsAsc.map((r) => ({
         id: r.id,
-        roomId,
+        roomId: r.room_id,
         role: r.role,
         content: r.content,
         createdAt: r.created_at.toISOString(),
@@ -661,7 +704,7 @@ router.get('/log/db', async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error('[GET /api/chat/log/db] error:', err);
     const status = typeof err?.status === 'number' ? err.status : 500;
-    const msg = typeof err?.message === 'string' ? err.message : 'INTERNAL_ERROR';
+    const msg = typeof err?.message === 'string' ? err?.message : 'INTERNAL_ERROR';
     return res.status(status).json({ ok: false, error: msg });
   }
 });
