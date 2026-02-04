@@ -15,3 +15,5 @@ const styles = StyleSheet.create({
   title: { fontSize: 22, fontWeight: '700', marginBottom: 8 },
   desc: { fontSize: 14, opacity: 0.7 },
 });
+
+//이 파일 안쓰고 authStack.tsx 파일에서 로긴 회원가입 로직 같이 묶어서 관리하는중
