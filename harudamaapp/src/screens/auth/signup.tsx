@@ -7,6 +7,13 @@ import {
   TouchableOpacity,
   ScrollView,
 } from 'react-native';
+import { useNavigation  } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { authStackParamList } from './authStack'; 
+
+type LoginNavigationProp = NativeStackNavigationProp<authStackParamList, 'Login'>;
+// import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_BASE } from '../../config/api';
 
 export default function Signup() {
   const [name, setName] = useState('');
@@ -16,6 +23,50 @@ export default function Signup() {
   const [passwordConfirm, setPasswordConfirm] = useState('');
   const [birthDate, setBirthDate] = useState('');
   const [gender, setGender] = useState<'M' | 'F' | null>(null);
+  const navigation = useNavigation<LoginNavigationProp>();
+
+  const handleSignup = async () => {
+  // 프론트 단 값 검증 추후 개선 : 1.비밀번호 규칙 2.이메일 형식 검증 3.각각의 입력폼 입력 타입 강제하기
+  if (!name || !email || !password || !birthDate || !gender) {
+    alert('필수 항목을 입력해주세요');
+    return;
+  }
+
+  if (password !== passwordConfirm) {
+    alert('비밀번호가 일치하지 않습니다');
+    return;
+  }
+
+  try { 
+    const response = await fetch(`${API_BASE}/api/auth/signup`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name,
+        email,
+        password,
+        phoneNumber,
+        birthDate,
+        gender,
+      }),
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      alert(result.error || '회원가입 실패');
+      return;
+    }
+
+    alert('회원가입 성공!');
+     navigation.navigate('Login'); 
+  } catch (err) {
+    console.error(err);
+    alert('서버 연결 실패');
+  }
+};
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -98,7 +149,9 @@ export default function Signup() {
       </View>
 
       {/* 회원가입 버튼 */}
-      <TouchableOpacity style={styles.signupBtn}>
+      <TouchableOpacity
+        style={styles.signupBtn} 
+        onPress={handleSignup}>
         <Text style={styles.signupText}>회원가입</Text>
       </TouchableOpacity>
 
