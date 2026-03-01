@@ -469,6 +469,13 @@ router.post('/room', async (req: Request, res: Response) => {
     });
   } catch (err) {
     console.error('[POST /api/chat/room] error:', err);
+    //db가 어디붙어있는지 좀 보려고 추가했어요~
+    const [rows] = await pool.query("SELECT DATABASE()");
+    console.log("현재 DB:", rows);
+    const [tables] = await pool.query("SHOW TABLES");
+    console.log("테이블 목록:", tables);
+    const [rows2] = await pool.query("SELECT @@hostname, @@port");
+    console.log("DB 서버 정보:", rows2);
     return res.status(500).json({ ok: false, error: 'INTERNAL_ERROR' });
   }
 });

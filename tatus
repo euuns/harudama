@@ -1,0 +1,107 @@
+[33mcommit ab3cda8dc8bcece6d0b2d21ea4d9c2cb2d11c9cd[m[33m ([m[1;31morigin/dev[m[33m)[m
+Author: kimheeseung <akwlsrkek@gmail.com>
+Date:   Fri Jan 30 09:50:32 2026 +0900
+
+    화면 추가
+
+[33mcommit dc2451c8b071e64084b678876a7cbb323dca4faa[m
+Author: kimheeseung <akwlsrkek@gmail.com>
+Date:   Tue Jan 27 09:56:34 2026 +0900
+
+    redis 추가
+
+[33mcommit 1c595bec59097bcf29ff538c0e3001557b671c3e[m
+Author: kimheeseung <akwlsrkek@gmail.com>
+Date:   Tue Jan 27 09:55:54 2026 +0900
+
+    redis 추가
+
+[33mcommit e3a749fc56012133e1aaec8bf88d1535622576aa[m
+Author: KimHeeseung <80235924+KimHeeseung@users.noreply.github.com>
+Date:   Wed Jan 7 11:55:28 2026 +0900
+
+    Delete harudamaapp/android directory
+
+[33mcommit 5f51fc43d3e67bd68300b5785d1e479fdd79b50c[m
+Author: kimheeseung <akwlsrkek@gmail.com>
+Date:   Wed Jan 7 11:54:24 2026 +0900
+
+    설정변경 npm rum dev:all 로 하면됨
+
+[33mcommit cf4204bbffb68a6dcb1e9b5f3f690f49a4a7da8a[m
+Author: kimheeseung <akwlsrkek@gmail.com>
+Date:   Tue Jan 6 10:23:46 2026 +0900
+
+    tunnel
+
+[33mcommit 75de355151aea07f67e74d92c4f555de0656c473[m
+Author: kimheeseung <akwlsrkek@gmail.com>
+Date:   Wed Dec 24 11:02:25 2025 +0900
+
+    커밋
+
+[33mcommit dd14a876da73c2b320ecefc76b8cd56a47bf17a6[m
+Author: Ubuntu <ubuntu@ip-172-31-38-38.ap-northeast-2.compute.internal>
+Date:   Tue Dec 23 06:12:17 2025 +0000
+
+    chore: add docker setup for dev server
+
+[33mcommit ec338df906390f84a8b0b2f4dfaebef14f365ead[m
+Author: kimheeseung <akwlsrkek@gmail.com>
+Date:   Tue Dec 23 15:05:13 2025 +0900
+
+    feat: 익명 유저 기반 채팅방 + Redis 저장 구조 추가
+
+[33mcommit 536913b1e7e7bd2580e844a6472876893586a9ae[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m, [m[1;32mmain[m[33m)[m
+Author: kimheeseung <akwlsrkek@gmail.com>
+Date:   Fri Dec 12 08:55:16 2025 +0900
+
+    feat: ~~~
+
+[33mcommit 80217ef03d477d613d8d7719283ee492c4fe92dc[m
+Author: kimheeseung <akwlsrkek@gmail.com>
+Date:   Fri Dec 12 08:52:58 2025 +0900
+
+    feat: ~~~
+
+[33mcommit 6cde0e6b6bb4cc3a8358469d736de72f3928f61b[m
+Author: kimheeseung <akwlsrkek@gmail.com>
+Date:   Thu Dec 11 11:18:51 2025 +0900
+
+    feat: ~~~
+
+[33mcommit f0446473c5d9d309df8a55d9bf6c044cf8468a4e[m
+Author: kimheeseung <akwlsrkek@gmail.com>
+Date:   Mon Dec 8 11:24:52 2025 +0900
+
+    restore android directory
+
+[33mcommit 3979f778845ee3e3f1a441b26d1176324928b225[m
+Author: KimHeeseung <80235924+KimHeeseung@users.noreply.github.com>
+Date:   Mon Dec 8 11:00:06 2025 +0900
+
+    Delete harudamaapp/ios directory
+
+[33mcommit da7a45ce492e773c280509c076518e2f310c957e[m
+Author: KimHeeseung <80235924+KimHeeseung@users.noreply.github.com>
+Date:   Mon Dec 8 10:59:59 2025 +0900
+
+    Delete harudamaapp/android directory
+
+[33mcommit 4bb827bb5b7fd754bf2a1cdd95a8e2d3fccb7901[m
+Author: kimheeseung <akwlsrkek@gmail.com>
+Date:   Fri Dec 5 14:13:15 2025 +0900
+
+    feat: gpt-5 mini 연결
+
+[33mcommit 55da1ab413253ad18d0c730ed464ab5c3b586f1e[m
+Author: KimHeeseung <80235924+KimHeeseung@users.noreply.github.com>
+Date:   Thu Nov 27 10:09:32 2025 +0900
+
+    Create README.md
+
+[33mcommit fdb6f9f99df2a1ff82bc386a6367e3601274fd7c[m
+Author: Kim Heeseung <akwlsrkek@gmail.com>
+Date:   Thu Nov 27 09:29:54 2025 +0900
+
+    initial commit

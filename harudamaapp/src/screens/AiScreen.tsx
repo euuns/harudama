@@ -15,7 +15,7 @@ import { API_BASE } from '../config/api';
 type RoomItem = {
   id: number;
   title: string | null;
-  createdAt: string;
+  createdAt: string;  
 };
 
 export default function AiScreen() {

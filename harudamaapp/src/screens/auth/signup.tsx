@@ -7,9 +7,9 @@ import {
   TouchableOpacity,
   ScrollView,
 } from 'react-native';
-import { useNavigation  } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import type { authStackParamList } from './authStack'; 
+import type { authStackParamList } from './authStack';
 
 type LoginNavigationProp = NativeStackNavigationProp<authStackParamList, 'Login'>;
 // import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -26,47 +26,50 @@ export default function Signup() {
   const navigation = useNavigation<LoginNavigationProp>();
 
   const handleSignup = async () => {
-  // 프론트 단 값 검증 추후 개선 : 1.비밀번호 규칙 2.이메일 형식 검증 3.각각의 입력폼 입력 타입 강제하기
-  if (!name || !email || !password || !birthDate || !gender) {
-    alert('필수 항목을 입력해주세요');
-    return;
-  }
-
-  if (password !== passwordConfirm) {
-    alert('비밀번호가 일치하지 않습니다');
-    return;
-  }
-
-  try { 
-    const response = await fetch(`${API_BASE}/api/auth/signup`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        name,
-        email,
-        password,
-        phoneNumber,
-        birthDate,
-        gender,
-      }),
-    });
-
-    const result = await response.json();
-
-    if (!response.ok) {
-      alert(result.error || '회원가입 실패');
+    // 프론트 단 값 검증 추후 개선 : 1.비밀번호 규칙 2.이메일 형식 검증 3.각각의 입력폼 입력 타입 강제하기
+    if (!name || !email || !password || !birthDate || !gender) {
+      alert('필수 항목을 입력해주세요');
       return;
     }
 
-    alert('회원가입 성공!');
-     navigation.navigate('Login'); 
-  } catch (err) {
-    console.error(err);
-    alert('서버 연결 실패');
-  }
-};
+    if (password !== passwordConfirm) {
+      alert('비밀번호가 일치하지 않습니다');
+      return;
+    }
+
+    try {
+      //경로에 회원가입 요청
+      const response = await fetch(`${API_BASE}/api/auth/signup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json', 
+        },
+        body: JSON.stringify({
+          name,
+          email,
+          password,
+          phoneNumber,
+          birthDate,
+          gender,
+        }),
+      });
+
+      const result = await response.json();
+
+      // response.ok가 false라면 (예: 400 필수값 누락, 409 이메일 중복, 500 서버 에러 등)
+      if (!response.ok) {
+        alert(result.error || '회원가입 실패');
+        return;
+      }
+
+      alert('회원가입 성공!');
+      // 회원가입 처리가 끝났으므로, 네비게이션을 이용해 로그인 화면으로 즉시 이동
+      navigation.navigate('Login');
+    } catch (err) {
+      console.error(err);
+      alert('서버 연결 실패');
+    }
+  };
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -122,7 +125,18 @@ export default function Signup() {
         style={styles.input}
         placeholder="생년월일 (YYYY-MM-DD)"
         value={birthDate}
-        onChangeText={setBirthDate}
+        onChangeText={(text) => { // 숫자만 남기기 
+          const onlyNums = text.replace(/\D/g, "");
+          // YYYYMMDD → YYYY-MM-DD 변환 
+          if (onlyNums.length === 8) {
+            const formatted = onlyNums.slice(0, 4) +
+              "-" + onlyNums.slice(4, 6) +
+              "-" + onlyNums.slice(6, 8);
+            setBirthDate(formatted);
+          } else {
+            setBirthDate(text);
+          }
+        }} keyboardType="numeric"
       />
 
       {/* 성별 */}
@@ -150,12 +164,12 @@ export default function Signup() {
 
       {/* 회원가입 버튼 */}
       <TouchableOpacity
-        style={styles.signupBtn} 
+        style={styles.signupBtn}
         onPress={handleSignup}>
         <Text style={styles.signupText}>회원가입</Text>
       </TouchableOpacity>
 
-      {/* 카카오 연계 대비 */}
+      {/* 카카오 연계 기능 추가 예정 */}
       <Text style={styles.kakaoHint}>
         * 카카오 계정으로도 가입할 수 있어요
       </Text>
