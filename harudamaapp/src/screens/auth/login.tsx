@@ -34,25 +34,46 @@ export default function login() {
       });
 
       const result = await response.json();
+      console.log('login result = ', result);
 
       if (!response.ok) {
         alert(result.error || '로그인 실패');
         return;
       }
-      alert('로그인 성공!');
 
       // 서버로부터 정상적으로 토큰을 넘겨받았다면? AsyncStorage에 저장하여 자동로그인 처리에 활용
       if (result.token) {
         await AsyncStorage.setItem('userToken', result.token);
-        // 로그인 성공 시 AuthContext의 signIn()을 호출하여 로그인 상태로 변경
-        signIn();
+      } else {
+        alert('토큰이 없습니다.');
+        return;
       }
+
+      // ** 추가: userId 저장 **
+      const savedUserId =
+      result.userId ??
+      result.user?.userId ??
+      result.user_id ??
+      result.user?.user_id;
+
+    if (savedUserId !== undefined && savedUserId !== null) {
+      await AsyncStorage.setItem('user_id', String(savedUserId));
+    } else {
+      alert('로그인은 성공했지만 userId가 없습니다.');
+      return;
+    }
+
+      alert('로그인 성공!');
+
+      // 로그인 성공 시 AuthContext의 signIn()을 호출하여 로그인 상태로 변경
+      signIn();
 
     } catch (err) {
       console.error(err);
       alert('서버 연결 실패');
     }
   };
+  
 
   return (
     <View style={styles.container}>

@@ -7,16 +7,9 @@ import {
   Button,
   View,
   ScrollView,
-  TouchableOpacity,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE } from '../config/api';
-
-type RoomItem = {
-  id: number;
-  title: string | null;
-  createdAt: string;  
-};
 
 export default function AiScreen() {
   const [input, setInput] = useState('');
@@ -26,51 +19,52 @@ export default function AiScreen() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const [userId, setUserId] = useState<string | null>(null);
-
-  const [rooms, setRooms] = useState<RoomItem[]>([]);
   const [roomId, setRoomId] = useState<number | null>(null);
-
-  const [roomTitle, setRoomTitle] = useState('');
+  const [roomTitle, setRoomTitle] = useState<string>('');
 
   const headers = useMemo(() => ({ 'Content-Type': 'application/json' }), []);
 
-  const ensureAnonUserId = async (): Promise<string> => {
-    const saved = await AsyncStorage.getItem('anonUserId');
-    if (saved) return saved;
+  /**
+   * 로그인 후 저장된 user_id 읽기
+   */
+  const getStoredUserId = async (): Promise<string> => {
+    const saved = await AsyncStorage.getItem('user_id');
 
-    const res = await fetch(`${API_BASE}/api/chat/anon`, { method: 'POST' });
-    const json = await res.json();
+    if (!saved || !saved.trim()) {
+      throw new Error('LOGIN_USER_ID_NOT_FOUND');
+    }
 
-    if (!json.ok || !json.userId) throw new Error('ANON_ISSUE_FAILED');
-
-    await AsyncStorage.setItem('anonUserId', json.userId);
-    return json.userId as string;
+    return saved.trim();
   };
 
-  const loadRooms = async (uid: string) => {
-    const res = await fetch(
-      `${API_BASE}/api/chat/room?userId=${encodeURIComponent(uid)}`,
-    );
-    const json = await res.json();
+  /**
+   * 방 제목: 현재 날짜/시간
+   * 예: 2026-03-06 11:25
+   */
+  const makeRoomTitle = () => {
+    const now = new Date();
 
-    if (!json.ok) throw new Error(json.error || 'ROOM_LIST_FAILED');
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    const hh = String(now.getHours()).padStart(2, '0');
+    const mi = String(now.getMinutes()).padStart(2, '0');
 
-    const items = (json.items || []) as RoomItem[];
-    setRooms(items);
-    return items;
+    return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
   };
 
-  const createRoom = async (uid: string, title?: string) => {
+  const createRoom = async (uid: string, title: string) => {
     const res = await fetch(`${API_BASE}/api/chat/room`, {
       method: 'POST',
       headers,
       body: JSON.stringify({
-        userId: uid,
-        title: title?.trim() || null,
+        user_id: uid,
+        title,
       }),
     });
 
     const json = await res.json();
+
     if (!json.ok) throw new Error(json.error || 'ROOM_CREATE_FAILED');
 
     return json.room?.id as number;
@@ -80,30 +74,26 @@ export default function AiScreen() {
     (async () => {
       try {
         setErrorMsg(null);
+        setReply(null);
 
-        const uid = await ensureAnonUserId();
+        const uid = await getStoredUserId();
         setUserId(uid);
 
-        const items = await loadRooms(uid);
+        const title = makeRoomTitle();
+        setRoomTitle(title);
 
-        if (items.length > 0) {
-          setRoomId(items[0].id);
-        } else {
-          const newRoomId = await createRoom(uid, '기본 채팅방');
-          await loadRooms(uid);
-          setRoomId(newRoomId);
-        }
+        const newRoomId = await createRoom(uid, title);
+        setRoomId(newRoomId);
       } catch (e) {
-        console.log(e);
-        setErrorMsg('초기화 실패: 서버 연결/설정 확인 필요');
+        setErrorMsg('회원 정보가 없거나 채팅방 생성에 실패했습니다. 로그인 상태를 확인해주세요.');
       }
     })();
   }, []);
 
   const sendMessage = async () => {
     if (!input.trim()) return;
-    if (!userId) return setErrorMsg('userId 없음');
-    if (!roomId) return setErrorMsg('roomId 없음(채팅방을 선택/생성하세요)');
+    if (!userId) return setErrorMsg('user_id 없음');
+    if (!roomId) return setErrorMsg('roomId 없음(채팅방 생성 실패)');
 
     try {
       setLoading(true);
@@ -114,7 +104,7 @@ export default function AiScreen() {
         method: 'POST',
         headers,
         body: JSON.stringify({
-          userId,
+          user_id: userId,
           roomId,
           message: input.trim(),
         }),
@@ -123,37 +113,14 @@ export default function AiScreen() {
       const json = await res.json();
 
       if (!json.ok) {
-        setErrorMsg(json.error || '서버 오류가 발생했어.');
+        setErrorMsg(json.error || '서버 오류가 발생했습니다.');
         return;
       }
 
       setReply(json.assistant?.content ?? '(내용 없음)');
       setInput('');
     } catch (e) {
-      console.log(e);
-      setErrorMsg('서버 연결 실패 😢');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const onCreateRoomPress = async () => {
-    if (!userId) return;
-
-    try {
-      setLoading(true);
-      setErrorMsg(null);
-
-      const newRoomId = await createRoom(userId, roomTitle || '새 채팅방');
-
-      setRoomTitle('');
-      await loadRooms(userId);
-
-      setRoomId(newRoomId);
-      setReply(null);
-    } catch (e: any) {
-      console.log(e);
-      setErrorMsg(e?.message || '방 생성 실패');
+      setErrorMsg('서버 연결 실패');
     } finally {
       setLoading(false);
     }
@@ -163,51 +130,13 @@ export default function AiScreen() {
     <SafeAreaView style={styles.container}>
       <Text style={styles.title}>AI</Text>
 
-      <Text style={styles.sub}>userId: {userId ? userId : '(loading...)'}</Text>
+      <Text style={styles.sub}>
+        user_id: {userId ? userId : '(loading...)'}
+      </Text>
 
-      <View style={styles.roomBar}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {rooms.map((r) => {
-            const active = r.id === roomId;
-
-            return (
-              <TouchableOpacity
-                key={r.id}
-                onPress={() => {
-                  setRoomId(r.id);
-                  setReply(null);
-                }}
-                style={[styles.roomChip, active && styles.roomChipActive]}
-              >
-                <Text
-                  style={[
-                    styles.roomChipText,
-                    active && styles.roomChipTextActive,
-                  ]}
-                >
-                  {r.title ? r.title : `방 #${r.id}`}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-      </View>
-
-      <View style={styles.newRoomBox}>
-        <TextInput
-          style={styles.roomInput}
-          value={roomTitle}
-          onChangeText={setRoomTitle}
-          placeholder="새 채팅방 제목(선택)"
-          autoCorrect={false}
-          autoCapitalize="none"
-        />
-        <Button
-          title="방 만들기"
-          onPress={onCreateRoomPress}
-          disabled={loading || !userId}
-        />
-      </View>
+      <Text style={styles.sub}>
+        방 제목: {roomTitle ? roomTitle : '(생성 중...)'}
+      </Text>
 
       <View style={styles.inputBox}>
         <TextInput
@@ -218,9 +147,6 @@ export default function AiScreen() {
           multiline
           autoCorrect={false}
           autoCapitalize="none"
-          autoComplete="off"
-          keyboardType="default"
-          textBreakStrategy="simple"
         />
         <Button
           title={loading ? '생각 중...' : '보내기'}
@@ -238,7 +164,9 @@ export default function AiScreen() {
             <Text style={styles.reply}>{reply}</Text>
           </>
         ) : (
-          <Text style={styles.placeholder}>방을 선택하고 메시지를 보내보세요.</Text>
+          <Text style={styles.placeholder}>
+            메시지를 보내보세요.
+          </Text>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -248,24 +176,17 @@ export default function AiScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16, backgroundColor: '#fff' },
   title: { fontSize: 22, fontWeight: '600', textAlign: 'center', marginBottom: 8 },
-  sub: { fontSize: 12, color: '#666', textAlign: 'center', marginBottom: 10 },
-
-  roomBar: { marginBottom: 10 },
-  roomChip: {
-    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16,
-    borderWidth: 1, borderColor: '#ddd', marginRight: 8,
-  },
-  roomChipActive: { borderColor: '#111' },
-  roomChipText: { fontSize: 13, color: '#666' },
-  roomChipTextActive: { color: '#111', fontWeight: '600' },
-
-  newRoomBox: { flexDirection: 'row', gap: 8, alignItems: 'center', marginBottom: 12 },
-  roomInput: { flex: 1, borderWidth: 1, borderColor: '#ddd', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8 },
+  sub: { fontSize: 12, color: '#666', textAlign: 'center', marginBottom: 8 },
 
   inputBox: { marginBottom: 16, gap: 8 },
   input: {
-    minHeight: 80, borderWidth: 1, borderColor: '#ddd', borderRadius: 8,
-    paddingHorizontal: 10, paddingVertical: 8, textAlignVertical: 'top',
+    minHeight: 80,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    textAlignVertical: 'top',
   },
 
   resultBox: { flex: 1, marginTop: 8 },
