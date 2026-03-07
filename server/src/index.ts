@@ -7,6 +7,7 @@ import chatRouter from './routes/chat';
 import signupRouter from './auth/signup'; // 회원가입 동작을 위한 라우터
 import loginRouter from './auth/login'; // 로그인 기능 동작을 위한 라우터
 import authcheckRouter from './auth/authcheck'; // 토큰 검증(자동로그인)용 라우터
+import withdrawnRouter from './auth/withdrawn'; // 회원탈퇴 동작을 위한 라우터
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -19,6 +20,7 @@ app.use('/api/chat', chatRouter);
 app.use('/api/auth/signup', signupRouter);
 app.use('/api/auth/login', loginRouter);
 app.use('/api/auth/authcheck', authcheckRouter);
+app.use('/api/auth/withdrawn', withdrawnRouter);
 
 // 헬스체크용
 app.get('/', (req, res) => {

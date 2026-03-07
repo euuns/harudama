@@ -1,6 +1,8 @@
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+// Settings 탭 내에서 스택 이동을 위해 native-stack 네비게이터 추가
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE } from './src/config/api';
 
@@ -10,9 +12,32 @@ import AuthStack from './src/screens/auth/authStack'; //로그인, 회원가입,
 // 로그인 이후 화면
 import calendar from './src/screens/calendar'; //달력화면
 import AiScreen from './src/screens/AiScreen'; //AI화면
-import Settings from './src/screens/Settings'; //설정화면
+import Settings from './src/screens/Settings/Settings'; //설정화면
+import Myinfo from './src/screens/Settings/myinfo'; //내 정보 화면
 
 const Tab = createBottomTabNavigator();
+// Settings 탭 내부 네비게이터 객체 생성
+const SettingsStack = createNativeStackNavigator();
+
+//Settings 탭 전용 스택 네비게이터 컴포넌트
+function SettingsStackScreen() {
+  return (
+    <SettingsStack.Navigator>
+      {/* 기존 설정 메인 화면 */}
+      <SettingsStack.Screen
+        name="SettingsMain"
+        component={Settings}
+        options={{ headerShown: false }} // 탭 네비게이터의 헤더가 이미 있으므로 스택 자체의 헤더는 숨김
+      />
+      {/* 내 정보 화면 */}
+      <SettingsStack.Screen
+        name="MyInfo"
+        component={Myinfo}
+        options={{ title: '내 정보' }} // 스택 이동 시 '내 정보'라는 헤더 타이틀 표시
+      />
+    </SettingsStack.Navigator>
+  );
+}
 
 // 로그인/로그아웃 상태 관리를 위한 AuthContext 
 export const AuthContext = React.createContext<{
@@ -99,7 +124,7 @@ export default function App() {
           >
             <Tab.Screen name="달력" component={calendar} />
             <Tab.Screen name="AI" component={AiScreen} />
-            <Tab.Screen name="설정" component={Settings} />
+            <Tab.Screen name="설정" component={SettingsStackScreen} />
           </Tab.Navigator>
         ) : (
           //  로그인 되지 않은 유저가 보는 화면 (로그인/회원가입)
