@@ -5,7 +5,7 @@
 # ===============================
 
 # ★ 자신의 pem 파일 경로
-$pem = "C:\Users\plastichero\Desktop\harudama\1589.pem"
+$pem = "C:\Users\user\project\harudama\1589.pem"
 
 ssh -N `
   -o ServerAliveInterval=30 `
