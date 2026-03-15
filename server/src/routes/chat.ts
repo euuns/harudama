@@ -4,7 +4,7 @@ import OpenAI from 'openai';
 import { pool } from '../db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2/promise';
 import { getRedis } from '../redis';
-
+import { handleSchedule } from "../services/scheduleService";
 /* =====================
  * 타입
  * ===================== */
@@ -918,6 +918,9 @@ router.post('/', async (req: Request, res: Response) => {
       content: msg,
       createdAt: userCreatedAt,
     });
+
+    // 일정 관련 메시지인 경우 별도 처리
+    await handleSchedule(userId, msg, userInsertId);
 
     /* 2) 메시지 분류 */
     const memoryQuery = isMemoryQuery(msg);

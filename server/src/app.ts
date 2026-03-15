@@ -2,6 +2,9 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 
+import calendarRouter from "./routes/calendar";
+
+
 dotenv.config();
 
 const app = express();
@@ -16,5 +19,6 @@ app.get('/health', (_req, res) => {
 
 // TODO: 나중에 /api/chat 같은 라우트 추가
 // app.use('/api/chat', chatRouter);
+app.use("/api/calendar", calendarRouter);
 
 export default app;
