@@ -11,9 +11,21 @@ type Schedule = {
   related_chat?: string;
 };
 
+function formatTime(dateStr: string): string {
+  // "2026-04-26T23:00:00" → "23:00"
+  const timePart = dateStr.slice(11, 16);
+  return timePart;
+}
+
+function getTodayKst(): string {
+  const now = new Date();
+  const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  return kst.toISOString().slice(0, 10);
+}
+
 export default function CalendarScreen() {
 
-  const today = new Date().toISOString().slice(0,10);
+  const today = getTodayKst();
 
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>(today);
@@ -24,46 +36,44 @@ export default function CalendarScreen() {
 
   const fetchSchedules = async () => {
     try {
-
-      const token = await AsyncStorage.getItem("token");
+      const token = await AsyncStorage.getItem("userToken");
 
       if (!token) {
-        console.log("로그인 토큰 없음");
+        console.log("[Calendar] 토큰 없음");
         return;
       }
 
-      const res = await fetch("http://10.0.2.2:3000/api/calendar", {
+      const res = await fetch("http://10.0.2.2:4000/api/calendar", {
         headers: {
           Authorization: `Bearer ${token}`
         }
       });
 
-      const data = await res.json();
+      const text = await res.text();
+      const data = JSON.parse(text);
 
-      console.log("calendar data:", data);
-
-      setSchedules(data);
+      if (Array.isArray(data)) {
+        setSchedules(data);
+      } else {
+        console.log("[Calendar] 응답 오류:", data);
+      }
 
     } catch (err) {
-
-      console.log("calendar fetch error", err);
-
+      console.log("[Calendar] fetch 오류:", err);
     }
   };
 
-  const filteredSchedules = schedules.filter(
-    s => s.schedule_date === selectedDate
-  );
+  const filteredSchedules = schedules.filter(s => {
+    return s.schedule_date.slice(0, 10) === selectedDate;
+  });
 
   const markedDates = schedules.reduce((acc: any, cur) => {
-
-    acc[cur.schedule_date] = {
+    const dateKey = cur.schedule_date.slice(0, 10);
+    acc[dateKey] = {
       marked: true,
       dotColor: "#007AFF"
     };
-
     return acc;
-
   }, {});
 
   return (
@@ -97,21 +107,17 @@ export default function CalendarScreen() {
             <Text style={{padding:10}}>일정 없음</Text>
           }
           renderItem={({ item }) => (
-
             <View style={styles.item}>
-
-              <Text style={styles.itemTitle}>
-                {item.title}
-              </Text>
-
+              <View style={styles.itemHeader}>
+                <Text style={styles.itemTime}>{formatTime(item.schedule_date)}</Text>
+                <Text style={styles.itemTitle}>{item.title}</Text>
+              </View>
               {item.related_chat && (
                 <Text style={styles.chat}>
                   관련 채팅: {item.related_chat}
                 </Text>
               )}
-
             </View>
-
           )}
         />
 
@@ -147,12 +153,23 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderColor: "#eee"
   },
-  itemTitle: {
-    fontSize: 15
+  itemHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  itemTime: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#007AFF',
+    minWidth: 40,
+  },
+  itemTitle: { 
+    fontSize: 15,
   },
   chat: {
     fontSize: 12,
     color: "#666",
     marginTop: 4
-  }
+  },
 });
